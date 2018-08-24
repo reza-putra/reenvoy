@@ -1,8 +1,8 @@
 package main
 
 import (
+	"fmt"
 	"math/rand"
-	"os"
 	"time"
 
 	"github.com/evo3cx/reenvoy"
@@ -15,6 +15,12 @@ func init() {
 }
 
 func main() {
-	cli := reenvoy.NewCLI(os.Stdout, os.Stderr)
-	os.Exit(cli.Run(os.Args))
+	options := reenvoy.SpawnOptions{
+		Command: "echo",
+		Args:    []string{"hello", "world"},
+	}
+
+	reenvoy.Start(options)
+
+	fmt.Scanln()
 }

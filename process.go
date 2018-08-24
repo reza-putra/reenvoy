@@ -235,6 +235,15 @@ func (r *Process) reload() error {
 	return r.signal(r.ReloadSignal)
 }
 
+//GetPID return pid current process
+func (r *Process) GetPID() PID {
+	if !r.running() {
+		return 0
+	}
+
+	return PID(r.Pid())
+}
+
 // Pid return pid of current process
 func (r *Process) Pid() int {
 	if !r.running() {
