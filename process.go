@@ -241,16 +241,7 @@ func (r *Process) GetPID() PID {
 		return 0
 	}
 
-	return PID(r.Pid())
-}
-
-// Pid return pid of current process
-func (r *Process) Pid() int {
-	if !r.running() {
-		return 0
-	}
-
-	return r.exec.Process.Pid
+	return PID(r.exec.Process.Pid)
 }
 
 //  check if we already have running process

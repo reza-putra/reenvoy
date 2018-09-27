@@ -42,7 +42,7 @@ type SpawnOptions struct {
 	// sleeping for a random amount of time before sending the signal. This
 	// prevents multiple processes from all signaling at the same time. This value
 	// may be zero (which disables the splay entirely).
-	Splay time.Duration
+	// Splay time.Duration
 
 	// KillSignal is the signal to send to gracefully kill this process. This
 	// value may be nil.
@@ -73,10 +73,10 @@ func SpawnProcess(opt SpawnOptions) (*Process, error) {
 		ReloadSignal: opt.ReloadSignal,
 		KillSignal:   opt.KillSignal,
 		KillTimeout:  opt.KillTimeout,
-		Splay:        opt.Splay,
-		Stdin:        opt.Stdin,
-		Stdout:       opt.Stdout,
-		StdErr:       opt.StdErr,
+		// Splay:        opt.Splay,
+		Stdin:  opt.Stdin,
+		Stdout: opt.Stdout,
+		StdErr: opt.StdErr,
 	}
 
 	if err := p.Start(); err != nil {
@@ -87,6 +87,10 @@ func SpawnProcess(opt SpawnOptions) (*Process, error) {
 }
 
 func defaultOptions(opt SpawnOptions) SpawnOptions {
+	if opt.Command == "" {
+		opt.Command = "envoy"
+	}
+
 	if opt.KillSignal == nil {
 		opt.KillSignal = os.Kill
 	}
