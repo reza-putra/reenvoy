@@ -191,7 +191,7 @@ func TestReloadNoSignal(t *testing.T) {
 	}
 }
 
-func TestReloadNoProcess(t *testing.T) {
+func TestProcess_Restart(t *testing.T) {
 	t.Parallel()
 
 	c := testProcess(t)
@@ -201,7 +201,7 @@ func TestReloadNoProcess(t *testing.T) {
 	}
 }
 
-func TestPid(t *testing.T) {
+func TestProcess_GetPid(t *testing.T) {
 	t.Parallel()
 
 	c := testProcess(t)
@@ -210,13 +210,13 @@ func TestPid(t *testing.T) {
 	}
 	defer c.Stop()
 
-	pid := c.Pid()
+	pid := c.GetPID()
 	if pid == 0 {
 		t.Error("expected pid to not be 0")
 	}
 }
 
-func TestExitCh(t *testing.T) {
+func TestProcess_ExitCh(t *testing.T) {
 	t.Parallel()
 
 	c := testProcess(t)
