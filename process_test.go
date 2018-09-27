@@ -17,8 +17,6 @@ const fileWaitSleepDelay = 500 * time.Millisecond
 func testProcess(t *testing.T) *Process {
 
 	p := &Process{
-		// Stdout:       &bytes.Buffer{},
-		// StdErr:       &bytes.Buffer{},
 		Command:      "echo",
 		Args:         []string{"hello", "world"},
 		ReloadSignal: os.Interrupt,
