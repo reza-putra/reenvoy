@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -41,8 +42,8 @@ type Process struct {
 
 	// Command is the name of the command to execute. Args are the list of
 	// arguments to pass when starting the command.
-	Command string
-	Args    []string
+	command string
+	args    []string
 
 	// Env specifies the environment of the process.
 	// Each entry is of the form "key=value".
@@ -59,6 +60,17 @@ type Process struct {
 	// ReloadSignal is the signal to send to reload this process. This value may
 	// be nil.
 	ReloadSignal os.Signal
+
+	// ParentShutdownTimes The time in second that Envoy will wait before shutting down the parent process during a hot restart.
+	// Readmore at https://www.envoyproxy.io/docs/envoy/v1.7.0/intro/arch_overview/hot_restart#arch-overview-hot-restart
+	ParentShutdownTimes time.Duration
+
+	//DrainTimes the time in second that Envoy will drain connection during restart
+	DrainTimes time.Duration
+
+	DockerContainer bool
+	ConfigPath      string
+	restartEpoch    int
 
 	// exec is the actual child process under management.
 	exec *exec.Cmd
@@ -95,35 +107,34 @@ type Process struct {
 // NewProc creates a new child process for management with high-level APIs for
 // sending signals to the child process, restarting the child process, and
 // gracefully terminating the child process.
-func NewProc() (*Process, error) {
+func NewProc() (Child, error) {
 	p := new(Process)
+
+	if p.DrainTimes.Nanoseconds() < 1 {
+		p.DrainTimes = 60 * time.Second
+	}
+
+	if p.ParentShutdownTimes.Nanoseconds() < 1 {
+		p.ParentShutdownTimes = 80 * time.Second
+	}
+
 	p.stopCh = make(chan struct{}, 1)
 	return p, nil
 }
 
-// Start starts and begins execution of the child process. A buffered channel
-// is returned which is where the command's exit code will be returned upon
-// exit. Any errors that occur prior to starting the command will be returned
-// as the second error argument, but any errors returned by the command after
-// execution will be returned as a non-zero value over the exit code channel.
+// Start starts and begins execution of the child process.
 func (r *Process) Start() error {
-	log.Printf("[INFO] spawning: %s", r.Command)
 	r.Lock()
 	defer r.Unlock()
 	return r.start()
 }
 
 // Restart send the reload signal to the process and does not wait for a response
-// If no reload signal was provided, the process is restarted and
-// replaces the process attached to this Child
 func (r *Process) Restart() error {
 
 	if r.ReloadSignal == nil {
 		log.Println("[INFO] restarting process")
 
-		// Take a full lock because sart is going to replace the process. We also
-		// want to make sure that no other routines attempt to send reload signal during
-		// this transition
 		r.Lock()
 		defer r.Unlock()
 
@@ -134,7 +145,7 @@ func (r *Process) Restart() error {
 		return r.start()
 	}
 
-	log.Println("[INFO] reloadinig process")
+	log.Println("[INFO] reloading process")
 
 	// We only need read lock here because neither the process nor the exit
 	// channel are changging
@@ -144,15 +155,60 @@ func (r *Process) Restart() error {
 	return r.reload()
 }
 
+func (r *Process) commandWithDocker() {
+	r.command = "docker"
+	r.args = []string{
+		"run",
+		"--network",
+		"host",
+		"-v",
+		fmt.Sprintf("%s:/testdata", r.ConfigPath),
+		envoyDockerImage,
+		"envoy",
+		"--mode",
+		"serve",
+		"--restart-epoch",
+		strconv.Itoa(r.restartEpoch),
+		"--drain-time-s",
+		fmt.Sprintf("%v", r.DrainTimes.Seconds()),
+		"--parent-shutdown-time-s",
+		fmt.Sprintf("%v", r.ParentShutdownTimes.Seconds()),
+		"-c",
+		"/testdata/envoy.yaml",
+	}
+}
+
+func (r *Process) commandEnvoy() {
+	r.command = "envoy"
+	r.args = []string{
+		"--mode",
+		"serve",
+		"--restart-epoch",
+		strconv.Itoa(r.restartEpoch),
+		"--drain-time-s",
+		fmt.Sprintf("%v", r.DrainTimes.Seconds()),
+		"--parent-shutdown-time-s",
+		fmt.Sprintf("%v", r.ParentShutdownTimes.Seconds()),
+		"-c",
+		"/testdata/envoy.yaml",
+	}
+}
+
 func (r *Process) start() error {
-	cmd := exec.Command(r.Command, r.Args...)
+	if r.DockerContainer {
+		r.commandWithDocker()
+	} else {
+		r.commandEnvoy()
+	}
+
+	cmd := exec.Command(r.command, r.args...)
 	cmd.Stdin = r.Stdin
 	cmd.Stderr = r.StdErr
 	cmd.Stdout = r.Stdout
 	cmd.Env = r.Env
 
 	if err := cmd.Start(); err != nil {
-		return err
+		return fmt.Errorf("%s err: %s", r.StdErr, err)
 	}
 
 	r.exec = cmd
@@ -201,7 +257,7 @@ func (r *Process) start() error {
 						"\n"+
 						"This is assumed to be a failure. Please ensure the command\n"+
 						"exits with a zero exit status.",
-					r.Command,
+					r.command,
 				)
 			}
 		case <-time.After(r.Timeout):
@@ -219,7 +275,7 @@ func (r *Process) start() error {
 					"continue. Consider using a process supervisor or utilizing the\n"+
 					"built-in exec mode instead.",
 				r.Timeout,
-				r.Command,
+				r.command,
 			)
 		}
 	}
@@ -267,6 +323,8 @@ func (r *Process) kill() {
 	if !r.running() {
 		return
 	}
+
+	log.Println("[INFO] kill process ", r.GetPID())
 
 	exited := false
 	process := r.exec.Process
