@@ -4,8 +4,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
+	"time"
 )
 
 // PID process identification number in linux
@@ -24,8 +24,10 @@ type ReEnvoy interface {
 	Restart() error
 	StopAllChildren()
 	ForceKillAllChildren()
+	IsRunning() bool
 }
 
+//Start start new process with default value
 func Start(opt SpawnOptions) (ReEnvoy, error) {
 	opt = defaultOptions(opt)
 
@@ -50,34 +52,68 @@ func Start(opt SpawnOptions) (ReEnvoy, error) {
 	return r, nil
 }
 
+//New return intance of ReEnvoy and default value without run a process
+func New(opt SpawnOptions) ReEnvoy {
+	opt = defaultOptions(opt)
+	r := &Reenvoy{
+		Options: opt,
+	}
+
+	sigterm := make(chan os.Signal, 1)
+	sighub := make(chan os.Signal, 1)
+
+	// register our signal to receive notification
+	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sighub, syscall.SIGHUP)
+
+	go r.Sigterm(sigterm)
+	go r.Sighup(sighub)
+
+	return r
+}
+
 type Reenvoy struct {
-	childs       []Child
-	Options      SpawnOptions
-	restartEpoch int
+	currentProcess Child
+	parentProcess  Child
+	Options        SpawnOptions
+	restartEpoch   int
+}
+
+func (r *Reenvoy) IsRunning() bool {
+	pid := r.currentProcess.GetPID()
+	return string(pid) != ""
 }
 
 // spawn a new child process and keeps track of its PID.
 func (r *Reenvoy) spawn(opt SpawnOptions) error {
-	os.Setenv("RESTART_EPOCH", strconv.Itoa(r.restartEpoch))
-	log.Println("[INFO] spawn a new child process at epoch", r.restartEpoch)
 
-	child, err := SpawnProcess(opt)
+	process, err := SpawnProcess(opt)
 	if err != nil {
 		return err
 	}
 
-	if len(r.childs) == 0 {
-		r.childs = []Child{child}
-	} else {
-		log.Printf("[INFO] spawn new child process with pid %v \n", child.GetPID())
-		r.childs = append(r.childs, child)
-	}
+	log.Printf("[INFO] spawn new process with pid %v \n", process.GetPID())
+	r.parentProcess = r.currentProcess
+	r.currentProcess = process
+
 	return nil
 }
 
 func (r *Reenvoy) Restart() error {
 	r.restartEpoch++
-	return r.spawn(r.Options)
+
+	if err := r.spawn(r.Options); err != nil {
+		return err
+	}
+
+	if r.parentProcess != nil {
+		// shutdown parent process after some period of time
+		time.Sleep(r.Options.ParentShutdownTimes)
+		r.parentProcess.Kill()
+
+	}
+
+	return nil
 }
 
 // Sigterm handler for stop all the children process
@@ -104,22 +140,27 @@ func (r *Reenvoy) Sigusr1() {
 
 // StopAllChildren stop iterate through all known child processes, send a TERM signal to each of them.
 func (r *Reenvoy) StopAllChildren() {
-	for _, child := range r.childs {
-		log.Println("[INFO] Stopped childred with pid", child.GetPID())
-		child.Stop()
+	if r.currentProcess != nil {
+		log.Println("[INFO] Stopped current process with pid", r.currentProcess.GetPID())
+		r.currentProcess.Stop()
 	}
 
-	log.Println("all children exited cleanly")
+	if r.parentProcess != nil {
+		log.Println("[INFO] Stopped parent process with pid", r.parentProcess.GetPID())
+		r.parentProcess.Stop()
+	}
+
 }
 
-// ForceKillAllChildren iterate through all known child processes and force kill them. Typically
-// StopAllChildren() should be attempted first to give child processes an
-// opportunity to clean up state before exiting
+// ForceKillAllChildren force kill current & parent process.
 func (r *Reenvoy) ForceKillAllChildren() {
-	for _, child := range r.childs {
-		log.Println("[INFO] Kill childred with pid", child.GetPID())
-		child.Kill()
+	if r.currentProcess != nil {
+		log.Println("[INFO] Kill current process with pid", r.currentProcess.GetPID())
+		r.currentProcess.Kill()
 	}
 
-	log.Println("all children exited cleanly")
+	if r.parentProcess != nil {
+		log.Println("[INFO] Kill parent process with pid", r.parentProcess.GetPID())
+		r.parentProcess.Kill()
+	}
 }
