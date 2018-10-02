@@ -71,9 +71,8 @@ type Reenvoy struct {
 }
 
 func (r *Reenvoy) IsRunning() bool {
-
-	pid := r.currentProcess.GetPID()
-	return string(pid) != ""
+	state := r.currentProcess.ProcessState()
+	return !state.Exited()
 }
 
 // spawn a new child process and keeps track of its PID.
