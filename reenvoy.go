@@ -5,19 +5,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 )
 
 // PID process identification number in linux
 type PID int
-
-type Child interface {
-	Restart() error
-	Stop()
-	Kill()
-	Start() error
-	GetPID() PID
-}
 
 // ReEnvoy will be hot restarted for config changes and binary updates
 type ReEnvoy interface {
@@ -80,19 +71,19 @@ type Reenvoy struct {
 }
 
 func (r *Reenvoy) IsRunning() bool {
+
 	pid := r.currentProcess.GetPID()
 	return string(pid) != ""
 }
 
 // spawn a new child process and keeps track of its PID.
 func (r *Reenvoy) spawn(opt SpawnOptions) error {
-
-	process, err := SpawnProcess(opt)
+	process, err := SpawnProcess(opt, r.restartEpoch)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("[INFO] spawn new process with pid %v \n", process.GetPID())
+	log.Printf("[INFO] spawn new process with pid %v restart epoc \n", process.GetPID(), r.restartEpoch)
 	r.parentProcess = r.currentProcess
 	r.currentProcess = process
 
@@ -100,18 +91,10 @@ func (r *Reenvoy) spawn(opt SpawnOptions) error {
 }
 
 func (r *Reenvoy) Restart() error {
-	r.restartEpoch++
-
 	if err := r.spawn(r.Options); err != nil {
 		return err
 	}
-
-	if r.parentProcess != nil {
-		// shutdown parent process after some period of time
-		time.Sleep(r.Options.ParentShutdownTimes)
-		r.parentProcess.Kill()
-
-	}
+	r.restartEpoch++
 
 	return nil
 }
