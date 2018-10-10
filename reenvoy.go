@@ -15,7 +15,7 @@ type ReEnvoy interface {
 	Restart() error
 	StopAllChildren()
 	ForceKillAllChildren()
-	IsRunning() bool
+	IsExited() bool
 }
 
 //Start start new process with default value
@@ -70,9 +70,16 @@ type Reenvoy struct {
 	restartEpoch   int
 }
 
-func (r *Reenvoy) IsRunning() bool {
+func (r *Reenvoy) IsExited() bool {
+	if r.currentProcess == nil {
+		return false
+	}
+
 	state := r.currentProcess.ProcessState()
-	return !state.Exited()
+	if state == nil {
+		return true
+	}
+	return state.Exited()
 }
 
 // spawn a new child process and keeps track of its PID.
