@@ -33,6 +33,15 @@ var (
 	ExitCodeError = 127
 )
 
+type Child interface {
+	Restart() error
+	Stop()
+	Kill()
+	Start() error
+	ProcessState() *os.ProcessState
+	GetPID() PID
+}
+
 type Process struct {
 	sync.RWMutex
 
@@ -403,6 +412,12 @@ func (r *Process) ExitCh() <-chan int {
 	r.RLock()
 	defer r.RUnlock()
 	return r.exitCh
+}
+
+//ProcessState 	contains information about an exited process,
+// available after a call to Wait or Run.
+func (r *Process) ProcessState() *os.ProcessState {
+	return r.exec.ProcessState
 }
 
 // Signal sends a signal to the Process, returning any errors that accur.

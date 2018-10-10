@@ -37,8 +37,6 @@ type SpawnOptions struct {
 	Stdout io.Writer
 	StdErr io.Writer
 
-	RestartEpoch int
-
 	// ParentShutdownTimes The time in second that Envoy will wait before shutting down the parent process during a hot restart.
 	// Readmore at https://www.envoyproxy.io/docs/envoy/v1.7.0/intro/arch_overview/hot_restart#arch-overview-hot-restart
 	ParentShutdownTimes time.Duration
@@ -48,7 +46,7 @@ type SpawnOptions struct {
 }
 
 //SpawnProcess spawn new process and return instance of process
-func SpawnProcess(opt SpawnOptions) (*Process, error) {
+func SpawnProcess(opt SpawnOptions, restartEpoch int) (*Process, error) {
 	opt = defaultOptions(opt)
 	p := &Process{
 		Env:                 opt.Env,
@@ -58,9 +56,9 @@ func SpawnProcess(opt SpawnOptions) (*Process, error) {
 		StdErr:              opt.StdErr,
 		DockerContainer:     opt.DockerContainer,
 		ConfigPath:          opt.ConfigPath,
-		restartEpoch:        opt.RestartEpoch,
 		DrainTimes:          opt.DrainTimes,
 		ParentShutdownTimes: opt.ParentShutdownTimes,
+		restartEpoch:        restartEpoch,
 	}
 
 	if err := p.Start(); err != nil {
@@ -82,6 +80,5 @@ func defaultOptions(opt SpawnOptions) SpawnOptions {
 	if opt.ParentShutdownTimes.Nanoseconds() < 1 {
 		opt.ParentShutdownTimes = 70 * time.Second
 	}
-
 	return opt
 }
