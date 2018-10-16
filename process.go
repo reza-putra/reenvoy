@@ -199,7 +199,7 @@ func (r *Process) commandEnvoy() {
 		"--parent-shutdown-time-s",
 		fmt.Sprintf("%v", r.ParentShutdownTimes.Seconds()),
 		"-c",
-		"/testdata/envoy.yaml",
+		fmt.Sprintf("%s/envoy.yaml", r.ConfigPath),
 	}
 }
 
