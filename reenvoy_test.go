@@ -1,25 +1,24 @@
-package reenvoy_test
+package reenvoy
 
 import (
 	"os"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/evo3cx/reenvoy"
 )
 
-func TestReenvoy_Start(t *testing.T) {
-	opts := reenvoy.SpawnOptions{
-		Command:      "echo",
-		Args:         []string{"hello", "world"},
-		ReloadSignal: os.Interrupt,
-		KillSignal:   os.Kill,
-		KillTimeout:  2 * time.Second,
-	}
+func processTest(command string, args []string) *Process {
+	p := new(Process)
+	p.command, p.args = command, args
+	p.Stdout = os.Stdout
+	p.StdErr = os.Stderr
+	return p
+}
 
-	proc, err := reenvoy.SpawnProcess(opts)
-	require.Nil(t, err, "start reenvoy")
+func TestReenvoy_Start(t *testing.T) {
+	proc := processTest("echo", []string{"hello", "world"})
+	proc.Serve()
+
+	require.Equal(t, true, proc.isFinished)
 	require.NotEmpty(t, proc.GetPID())
 }

@@ -2,7 +2,6 @@ package reenvoy
 
 import (
 	"fmt"
-	"os"
 	"syscall"
 	"testing"
 	"time"
@@ -17,12 +16,8 @@ const fileWaitSleepDelay = 500 * time.Millisecond
 func testProcess(t *testing.T) *Process {
 
 	p := &Process{
-		Command:      "echo",
-		Args:         []string{"hello", "world"},
-		ReloadSignal: os.Interrupt,
-		KillSignal:   os.Kill,
-		KillTimeout:  2 * time.Second,
-		Splay:        0 * time.Second,
+		command: "echo",
+		args:    []string{"hello", "world"},
 	}
 
 	return p
@@ -37,24 +32,16 @@ func TestStart(t *testing.T) {
 	stdin := gatedio.NewByteBuffer()
 	stdout := gatedio.NewByteBuffer()
 	stderr := gatedio.NewByteBuffer()
-	c.Stdin = stdin
 	c.Stdout = stdout
 	c.StdErr = stderr
 
 	// Custom env and command
 	c.Env = []string{"a=b", "c=d"}
-	c.Command = "env"
-	c.Args = nil
+	c.command = "env"
+	c.args = nil
 
-	assert.Nil(t, c.Start())
+	c.Start()
 	defer c.Stop()
-
-	//Wait process finish
-	select {
-	case <-c.ExitCh():
-	case <-time.After(fileWaitSleepDelay):
-		t.Fatal("process should have exited")
-	}
 
 	expected := "a=b\nc=d\n"
 	assert.Equal(t, expected, stdout.String())
